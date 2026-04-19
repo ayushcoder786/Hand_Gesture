@@ -103,9 +103,10 @@ class HandGestureController:
         # Gesture recognizer
         self.recognizer = GestureRecognizer(config)
 
-        # Mouse smoothing state
-        self._prev_x = 0
-        self._prev_y = 0
+        # Mouse smoothing state (EMA — prev position)
+        self._prev_x = 0.0
+        self._prev_y = 0.0
+        self._first_frame = True   # Skip EMA on first frame to jump to position
 
         # UI state
         self._show_help = False
@@ -123,38 +124,43 @@ class HandGestureController:
         # Desktop toggle state
         self._desktop_shown = False
 
-        # Timestamp counter for VIDEO mode (must be monotonically increasing)
-        self._timestamp_ms = 0
+        # Timestamp for VIDEO mode — use real wall-clock milliseconds
+        self._start_time_ms = int(time.time() * 1000)
 
     # ──────────────────────────────────────────────────────────────
     # System action handlers
     # ──────────────────────────────────────────────────────────────
 
     def _move_cursor(self, cx, cy):
-        """Move mouse cursor with smoothing."""
-        fr = config.FRAME_REDUCTION
-        cam_w, cam_h = config.CAMERA_WIDTH, config.CAMERA_HEIGHT
+        """Move mouse cursor — EMA smoothed, near-instant 1:1 finger tracking.
 
-        # Normalize within reduced frame
+        cx, cy are normalised [0,1] coordinates from MediaPipe.
+        FRAME_REDUCTION removes a thin border so the pointer can reach
+        all four screen edges without the user tilting their hand fully.
+        """
+        fr     = config.FRAME_REDUCTION
+        cam_w  = config.CAMERA_WIDTH
+        cam_h  = config.CAMERA_HEIGHT
+
+        # Map the inner frame region to the full screen
         norm_x = (cx * cam_w - fr) / (cam_w - 2 * fr)
         norm_y = (cy * cam_h - fr) / (cam_h - 2 * fr)
+        norm_x = max(0.0, min(1.0, norm_x))
+        norm_y = max(0.0, min(1.0, norm_y))
 
-        # Clamp
-        norm_x = max(0, min(1, norm_x))
-        norm_y = max(0, min(1, norm_y))
-
-        # Map to screen
         target_x = norm_x * self.screen_w
         target_y = norm_y * self.screen_h
 
-        # Apply speed multiplier
-        dx = (target_x - self._prev_x) * config.MOUSE_SPEED_MULTIPLIER
-        dy = (target_y - self._prev_y) * config.MOUSE_SPEED_MULTIPLIER
-
-        # Smooth
-        sf = config.SMOOTHING_FACTOR
-        smooth_x = self._prev_x + dx / sf
-        smooth_y = self._prev_y + dy / sf
+        # EMA: alpha=1.0 → instant/raw; lower = smoother but more lag
+        alpha = config.SMOOTHING_ALPHA
+        if self._first_frame:
+            # On the very first detection, jump directly to finger position
+            smooth_x = target_x
+            smooth_y = target_y
+            self._first_frame = False
+        else:
+            smooth_x = alpha * target_x + (1.0 - alpha) * self._prev_x
+            smooth_y = alpha * target_y + (1.0 - alpha) * self._prev_y
 
         self._prev_x = smooth_x
         self._prev_y = smooth_y
@@ -175,7 +181,7 @@ class HandGestureController:
     def _right_click(self):
         """Perform a right click with cooldown."""
         now = time.time()
-        if now - self._last_right_click_time > config.CLICK_COOLDOWN:
+        if now - self._last_right_click_time > config.RIGHT_CLICK_COOLDOWN:
             self._last_right_click_time = now
             pyautogui.rightClick(_pause=False)
 
@@ -278,12 +284,20 @@ class HandGestureController:
     # ──────────────────────────────────────────────────────────────
 
     def _dispatch(self, gesture, meta):
-        """Execute the system action corresponding to the detected gesture."""
+        """Execute the system action corresponding to the detected gesture.
+
+        The cursor ALWAYS moves with the finger — even when another action
+        fires. This makes the pointer feel live and direct at all times.
+        """
         self._current_gesture_name = gesture.name
 
-        if gesture == Gesture.MOVE_CURSOR:
-            self._move_cursor(meta['cursor_x'], meta['cursor_y'])
-        elif gesture == Gesture.LEFT_CLICK:
+        # ── Always update cursor position first ──────────────────────
+        # This ensures the pointer follows the index finger every frame,
+        # regardless of which gesture is active.
+        self._move_cursor(meta['cursor_x'], meta['cursor_y'])
+
+        # ── Then execute the detected action ─────────────────────────
+        if gesture == Gesture.LEFT_CLICK:
             self._left_click()
         elif gesture == Gesture.DOUBLE_CLICK:
             self._double_click()
@@ -394,24 +408,22 @@ class HandGestureController:
         help_lines = [
             "=== HAND GESTURE CONTROLS ===",
             "",
-            "Index finger up        -> Move cursor",
-            "Index touches thumb    -> Left click",
-            "Quick double touch     -> Double click",
-            "Peace sign (V)         -> Right click",
-            "Thumb + Index pinch    -> Zoom in / out",
-            "Index+Mid+Thumb up     -> Scroll (move up/down)",
-            "Closed fist            -> Show Desktop (Win+D)",
-            "Open palm (5 fingers)  -> Restore Windows",
-            "3 fingers (I+M+R)      -> Screenshot (Win+Shift+S)",
-            "4 fingers (no thumb)   -> Task View (Win+Tab)",
-            "Shaka (Thumb+Pinky)    -> Alt+Tab (switch window)",
-            "Thumb up only          -> Volume Up",
-            "Pinky up only          -> Volume Down",
-            "Thumb+Index+Mid up     -> Brightness Up",
-            "Ring+Pinky up only     -> Brightness Down",
-            "Open palm -> Close fist -> Play/Pause Media",
+            "Any hand pose         -> Cursor follows index tip",
+            "Index+Thumb pinch     -> Left click",
+            "Two quick pinches     -> Double click",
+            "Middle finger ONLY    -> Right click (hold)",
+            "Thumb+Index spread    -> Zoom in / out",
+            "Index+Middle (no thumb) -> Scroll up/down",
+            "Closed fist (hold)    -> Show Desktop (Win+D)",
+            "Open palm (hold)      -> Restore Windows",
+            "3 fingers I+M+R       -> Screenshot (Win+Shift+S)",
+            "4 fingers (no thumb)  -> Task View (Win+Tab)",
+            "Shaka (Thumb+Pinky)   -> Alt+Tab",
+            "Thumb only            -> Volume Up",
+            "Pinky only            -> Volume Down",
+            "Open palm -> Fist     -> Play/Pause Media",
             "",
-            "Press 'h' to close this help",
+            "Press 'h' to close help",
         ]
 
         y = 55
@@ -451,28 +463,36 @@ class HandGestureController:
                     print("[ERROR] Failed to read from camera.")
                     break
 
-                # Flip horizontally for natural mirror effect
-                if config.FLIP_HORIZONTAL:
-                    frame = cv2.flip(frame, 1)
+                try:
+                    # Flip horizontally for natural mirror effect
+                    if config.FLIP_HORIZONTAL:
+                        frame = cv2.flip(frame, 1)
 
-                # Convert BGR frame to MediaPipe Image (RGB)
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+                    # Convert BGR frame to MediaPipe Image (RGB)
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-                # Detect hand landmarks (VIDEO mode requires increasing timestamps)
-                self._timestamp_ms += 33  # ~30 FPS
-                result = self.hand_landmarker.detect_for_video(mp_image, self._timestamp_ms)
+                    # VIDEO mode requires strictly increasing timestamps in ms
+                    self._timestamp_ms = int(time.time() * 1000) - self._start_time_ms
+                    result = self.hand_landmarker.detect_for_video(mp_image, self._timestamp_ms)
 
-                landmarks = None
-                if result.hand_landmarks and len(result.hand_landmarks) > 0:
-                    landmarks = result.hand_landmarks[0]  # First hand
-                    gesture, meta = self.recognizer.recognize(landmarks)
-                    self._dispatch(gesture, meta)
-                else:
-                    self._current_gesture_name = "NO HAND"
+                    landmarks = None
+                    if result.hand_landmarks and len(result.hand_landmarks) > 0:
+                        landmarks = result.hand_landmarks[0]  # First hand
+                        gesture, meta = self.recognizer.recognize(landmarks)
+                        self._dispatch(gesture, meta)
+                    else:
+                        # Hand lost — reset smoothing + warmup so re-entry is safe
+                        self._first_frame = True
+                        self.recognizer._warmup_counter = 0
+                        self._current_gesture_name = "NO HAND"
+
+                except Exception as frame_err:
+                    # Never let a single bad frame crash the whole app
+                    print(f"[WARNING] Frame error: {frame_err}")
 
                 # Draw overlay
-                self._draw_overlay(frame, landmarks)
+                self._draw_overlay(frame, landmarks if 'landmarks' in dir() else None)
 
                 # Show frame
                 cv2.imshow("Hand Gesture Control", frame)

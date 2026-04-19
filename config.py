@@ -1,51 +1,44 @@
 """
 Configuration file for Hand Gesture Control System.
-Adjust these parameters to fine-tune gesture sensitivity and behavior.
 """
 
-# ─── Camera Settings ───────────────────────────────────────────────
-CAMERA_INDEX = 0                # Camera device index (0 = default webcam)
-CAMERA_WIDTH = 640              # Camera frame width
-CAMERA_HEIGHT = 480             # Camera frame height
-FLIP_HORIZONTAL = True          # Mirror the camera feed
+# ─── Camera ──────────────────────────────────────────────────────────
+CAMERA_INDEX       = 0
+CAMERA_WIDTH       = 640
+CAMERA_HEIGHT      = 480
+FLIP_HORIZONTAL    = True
 
-# ─── MediaPipe Hand Settings ──────────────────────────────────────
-MAX_HANDS = 1                   # Max number of hands to detect
-DETECTION_CONFIDENCE = 0.7      # Minimum detection confidence (0.0 - 1.0)
-TRACKING_CONFIDENCE = 0.7       # Minimum tracking confidence (0.0 - 1.0)
+# ─── MediaPipe ───────────────────────────────────────────────────────
+MAX_HANDS            = 1
+DETECTION_CONFIDENCE = 0.6
+TRACKING_CONFIDENCE  = 0.6
 
-# ─── Mouse Control Settings ──────────────────────────────────────
-SMOOTHING_FACTOR = 5            # Mouse movement smoothing (higher = smoother but laggier)
-MOUSE_SPEED_MULTIPLIER = 1.5    # Mouse speed multiplier
-FRAME_REDUCTION = 100           # Pixels to reduce from frame edges for mouse mapping zone
+# ─── Cursor Speed ────────────────────────────────────────────────────
+# EMA alpha: 1.0 = instant/raw  |  0.0 = never moves
+# 0.90 = very fast, follows finger almost 1:1 with minimal jitter
+SMOOTHING_ALPHA   = 0.90
+FRAME_REDUCTION   = 10      # px border crop (keep small for full-screen reach)
 
-# ─── Gesture Thresholds ──────────────────────────────────────────
-CLICK_DISTANCE_THRESHOLD = 0.04         # Distance between thumb tip & index tip for click
-PINCH_DISTANCE_THRESHOLD = 0.08         # Distance for zoom pinch gesture
-SCROLL_SPEED = 50                       # Scroll speed (pixels per frame)
-DRAG_THRESHOLD = 0.05                   # Distance to detect drag start
-FIST_THRESHOLD = 0.08                   # Max distance from fingertip to palm for fist detection
-FINGER_EXTENDED_THRESHOLD = 0.15        # Min distance from tip to MCP for "finger extended"
+# ─── Gesture Thresholds ──────────────────────────────────────────────
+CLICK_DISTANCE_THRESHOLD = 0.05   # Pinch distance for left-click
+DOUBLE_CLICK_WINDOW      = 0.30   # Max seconds between two taps = double-click
+SCROLL_SPEED             = 5      # Scroll units per trigger frame
+ZOOM_DELTA_THRESHOLD     = 0.012  # Min pinch change to register zoom (avoid jitter)
 
-# ─── Gesture Cooldowns (seconds) ────────────────────────────────
-CLICK_COOLDOWN = 0.4                    # Cooldown between clicks
-DOUBLE_CLICK_WINDOW = 0.35              # Max time window for double-click
-DESKTOP_TOGGLE_COOLDOWN = 1.5           # Cooldown for show desktop / restore
-SCREENSHOT_COOLDOWN = 2.0               # Cooldown for screenshot
-TASK_VIEW_COOLDOWN = 1.5                # Cooldown for task view
-ALT_TAB_COOLDOWN = 1.0                  # Cooldown for alt-tab switch
-VOLUME_CHANGE_COOLDOWN = 0.15           # Cooldown for volume changes
-BRIGHTNESS_CHANGE_COOLDOWN = 0.15       # Cooldown for brightness changes
+# ─── Cooldowns (seconds) ─────────────────────────────────────────────
+CLICK_COOLDOWN              = 0.18   # Faster click response
+RIGHT_CLICK_COOLDOWN        = 0.40
+DESKTOP_TOGGLE_COOLDOWN     = 2.0
+SCREENSHOT_COOLDOWN         = 2.0
+TASK_VIEW_COOLDOWN          = 1.5
+ALT_TAB_COOLDOWN            = 1.0
+VOLUME_CHANGE_COOLDOWN      = 0.12
+BRIGHTNESS_CHANGE_COOLDOWN  = 0.12
 
-# ─── Zoom Settings ───────────────────────────────────────────────
-ZOOM_SENSITIVITY = 0.05         # How much to zoom per frame
-ZOOM_MIN_DISTANCE = 0.03        # Minimum pinch distance
-ZOOM_MAX_DISTANCE = 0.25        # Maximum pinch distance
-
-# ─── Visual Overlay Settings ─────────────────────────────────────
-SHOW_LANDMARKS = True           # Draw hand landmarks on camera feed
-SHOW_FPS = True                 # Show FPS counter
-SHOW_GESTURE_LABEL = True       # Show current detected gesture
-OVERLAY_COLOR = (0, 255, 128)   # Green overlay color (BGR)
-OVERLAY_THICKNESS = 2           # Line thickness for drawing
-FONT_SCALE = 0.7                # Font size for text overlays
+# ─── Visual ──────────────────────────────────────────────────────────
+SHOW_LANDMARKS     = True
+SHOW_FPS           = True
+SHOW_GESTURE_LABEL = True
+OVERLAY_COLOR      = (0, 255, 128)
+OVERLAY_THICKNESS  = 2
+FONT_SCALE         = 0.7
